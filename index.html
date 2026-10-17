@@ -86,7 +86,7 @@ function tree(n,s){return Object.keys(n).sort().map(k=>{const x=n[k],has=Object.
 function detail(){const{s,p}=S.d,l=ef(s,p);
  const t=s=='%'?'进度记录':s=='*'?`<span class="t-rate">${p}</span>`:`<span class="t-${s=='#'?'tag':'place'}">${s}</span><span id="ren" contenteditable="true">${esc(p)}</span>`;
  return `<div class="dh"><button data-a="back">←</button><span class="ttl">${t}</span><span class="sm">${sh(l)}</span>${s=='#'||s=='@'?'<button data-a="addt" title="添加到输入框">+</button>':''}</div>`+el(l,1)}
-function settings(){const t=G('logy-theme','{}');return `<div class="set">`+TV.map(([k,n])=>`<label>${n}<input type="color" data-k="${k}" value="${t[k]||DEF[k]}"></label>`).join('')+`<div style="margin-top:8px"><button data-a="reset">重置主题</button></div><div style="margin-top:12px"><button data-a="exp">导出数据</button><button data-a="imp">导入数据</button><input id="file" type="file" accept=".json" hidden></div></div>`}
+function settings(){const t=G('logy-theme','{}');return `<div class="set">`+TV.map(([k,n])=>`<label>${n}<input type="color" data-k="${k}" value="${t[k]||DEF[k]}"></label>`).join('')+`<div style="margin-top:8px"><button data-a="reset">重置主题</button></div><div style="margin-top:12px"><button data-a="exp">导出数据</button><button data-a="impm">合并导入</button><button data-a="imp">覆盖导入</button><input id="file" type="file" accept=".json" hidden></div></div>`}
 function side(){if(S.d)return detail();const v=S.view=='log'?'tags':S.view;
  if(v=='tags'||v=='places')return tree(build(G(v)),v=='tags'?'#':'@')||'<p class="dim">空</p>';
  if(v=='ratings'){const m={};E().forEach(e=>(e.ratings||[]).forEach(r=>(m[r.str]??={r,n:0}).n++));return Object.values(m).sort((a,b)=>b.r.rating/b.r.scale-a.r.rating/a.r.scale).map(({r,n})=>`<div class="row" data-a="open" data-s="*" data-p="${r.str}"><span class="nm t-rate">${r.str}</span><span class="dim">${n}</span></div>`).join('')||'<p class="dim">空</p>'}
@@ -131,7 +131,7 @@ document.addEventListener('click',ev=>{if(ev.target.closest('.tx textarea,.ec'))
   t.onkeydown=k=>{if(k.key=='Enter'&&!k.shiftKey&&!k.isComposing){k.preventDefault();fin()}if(k.key=='Escape'){done=1;R()}};
   t.onfocusout=k=>{if(!t.contains(k.relatedTarget))fin()};return}
  else if(a=='reset'){localStorage.removeItem('logy-theme');applyTheme()}
- else if(a=='imp'){$('#file').click();return}
+ else if(a=='imp'||a=='impm'){IM=a=='impm'?'merge':'replace';$('#file').click();return}
  else if(a=='exp'){const b=new Blob([JSON.stringify({app:'logy',version:1,entries:E(),tags:G('tags'),places:G('places'),theme:G('logy-theme','{}')},null,1)],{type:'application/json'}),u=document.createElement('a');u.href=URL.createObjectURL(b);u.download=`logy-${new Date().toISOString().slice(0,10)}.json`;u.click();return}
  else if(a=='ac'){acApply(+t.dataset.j);return}
  R()});
@@ -139,13 +139,18 @@ document.addEventListener('toggle',e=>{if(e.target.dataset&&e.target.dataset.k)S
 document.addEventListener('input',e=>{if(e.target.dataset.k&&e.target.type=='color'){const t=G('logy-theme','{}');t[e.target.dataset.k]=e.target.value;P('logy-theme',t);applyTheme()}});
 document.addEventListener('focusout',e=>{if(e.target.id!='ren'||!S.d)return;const n=e.target.textContent.trim();if(n&&n!=S.d.p){ren(S.d.s=='#'?'tags':'places',S.d.s,S.d.p,n);S.d.p=n;R()}else e.target.textContent=S.d.p});
 document.addEventListener('keydown',e=>{if(e.target.id=='ren'&&e.key=='Enter'){e.preventDefault();e.target.blur()}});
-document.addEventListener('change',e=>{if(e.target.id!='file')return;const fl=e.target.files[0];if(!fl)return;const r=new FileReader;r.onload=()=>{try{let j=JSON.parse(r.result);if(Array.isArray(j))j={entries:j};
+document.addEventListener('change',e=>{if(e.target.id!='file')return;const fl=e.target.files[0];e.target.value='';if(!fl)return;const r=new FileReader;r.onload=()=>{try{let j=JSON.parse(r.result);if(Array.isArray(j))j={entries:j};
  ['entries','tags','places'].forEach(k=>{if(typeof j[k]=='string')j[k]=JSON.parse(j[k])});if(!Array.isArray(j.entries))throw 0;
+ const cv=a=>(a||[]).map(t=>typeof t=='string'?{id:id(),path:t}:t);
+ if(IM=='merge'){const cur=E(),ids=new Set(cur.map(x=>x.id)),sig=new Set(cur.map(x=>x.timestamp+'|'+x.raw)),add=j.entries.filter(x=>!ids.has(x.id)&&!sig.has(x.timestamp+'|'+x.raw)).map(x=>x.id?x:{...x,id:id()});
+  if(!confirm(`文件中共 ${j.entries.length} 条记录，其中 ${add.length} 条是新的，将合并进当前数据。继续？`))return;
+  P('entries',[...cur,...add]);add.forEach(x=>{ens('tags',x.tags||[]);ens('places',x.places||[])});cv(j.tags).forEach(t=>ens('tags',[t.path]));cv(j.places).forEach(t=>ens('places',[t.path]));R();return}
  if(!confirm(`导入 ${j.entries.length} 条记录，将覆盖当前数据。继续？`))return;
- const cv=a=>(a||[]).map(t=>typeof t=='string'?{id:id(),path:t}:t);P('entries',j.entries);P('tags',cv(j.tags));P('places',cv(j.places));
- j.entries.forEach(x=>{ens('tags',x.tags||[]);ens('places',x.places||[])});if(j.theme&&typeof j.theme=='object')P('logy-theme',j.theme);applyTheme();R()}catch(_){alert('无法识别的文件')}};r.readAsText(fl)});
+ P('entries',j.entries);P('tags',cv(j.tags));P('places',cv(j.places));
+ j.entries.forEach(x=>{ens('tags',x.tags||[]);ens('places',x.places||[])});if(j.theme&&typeof j.theme=='object')P('logy-theme',j.theme);
+ applyTheme();R()}catch(_){alert('无法识别的文件')}};r.readAsText(fl)});
 // ── composer + autocomplete ──
-let ac=[],ai=-1;
+let ac=[],ai=-1,IM='replace';
 function acUpd(){const i=$('#in'),b=i.value.slice(0,i.selectionStart),m=b.match(/([#@])\(?([^\s#@()]*)$/);ac=[];
  if(m){const q=m[2].toLowerCase();ac=G(m[1]=='#'?'tags':'places').map(t=>t.path).filter(p=>p.toLowerCase().includes(q)).slice(0,8).map(p=>[m[1],p,b.length-m[0].length])}
  ai=-1;const a=$('#ac');a.style.display=ac.length?'block':'none';a.innerHTML=ac.map((x,j)=>`<div data-a="ac" data-j="${j}">${x[0]}${esc(x[1])}</div>`).join('')}
